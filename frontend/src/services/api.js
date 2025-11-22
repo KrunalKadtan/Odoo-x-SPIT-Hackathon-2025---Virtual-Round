@@ -259,6 +259,28 @@ export const inventoryAPI = {
     const response = await api.get('/inventory/dashboard-stats/');
     return response.data;
   },
+
+  // Move History
+  getMoveHistory: async (params = {}) => {
+    const response = await api.get('/inventory/move-history/', { params });
+    return response.data;
+  },
+
+  // Warehouse Settings
+  getWarehouseSettings: async () => {
+    const response = await api.get('/inventory/settings/');
+    return response.data;
+  },
+
+  updateWarehouseSettings: async (data) => {
+    const response = await api.put('/inventory/settings/', data);
+    return response.data;
+  },
+
+  partialUpdateWarehouseSettings: async (data) => {
+    const response = await api.patch('/inventory/settings/', data);
+    return response.data;
+  },
 };
 
 export default api;

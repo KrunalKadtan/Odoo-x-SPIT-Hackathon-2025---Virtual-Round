@@ -9,6 +9,8 @@ import { InventoryListView } from './pages/InventoryListView';
 import { InventoryFormView } from './pages/InventoryFormView';
 import { OperationsPage } from './pages/OperationsPage';
 import { StocksPage } from './pages/StocksPage';
+import { SettingsPage } from './pages/SettingsPage';
+import { MoveHistoryPage } from './pages/MoveHistoryPage';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { InventoryLayout } from './components/InventoryLayout';
 import { tokenManager } from './services/api';
@@ -129,36 +131,25 @@ function App() {
           }
         />
 
-        {/* Placeholder routes */}
+        {/* Move History Route */}
         <Route
           path="/inventory/history"
           element={
             <ProtectedRoute>
               <InventoryLayout>
-                <div style={{ padding: '2rem' }}>
-                  <h1 style={{ fontSize: '1.875rem', marginBottom: '0.5rem' }}>Move History</h1>
-                  <p style={{ color: '#64748b' }}>Audit log of all inventory movements</p>
-                  <div style={{ marginTop: '1.5rem', backgroundColor: 'white', borderRadius: '0.5rem', border: '1px solid #e2e8f0', padding: '2rem', textAlign: 'center' }}>
-                    <p style={{ color: '#475569' }}>Move history feature coming soon...</p>
-                  </div>
-                </div>
+                <MoveHistoryPage />
               </InventoryLayout>
             </ProtectedRoute>
           }
         />
         
+        {/* Settings Route */}
         <Route
           path="/inventory/settings"
           element={
             <ProtectedRoute>
               <InventoryLayout>
-                <div style={{ padding: '2rem' }}>
-                  <h1 style={{ fontSize: '1.875rem', marginBottom: '0.5rem' }}>Settings</h1>
-                  <p style={{ color: '#64748b' }}>Manage your warehouse settings and locations</p>
-                  <div style={{ marginTop: '1.5rem', backgroundColor: 'white', borderRadius: '0.5rem', border: '1px solid #e2e8f0', padding: '2rem', textAlign: 'center' }}>
-                    <p style={{ color: '#475569' }}>Settings feature coming soon...</p>
-                  </div>
-                </div>
+                <SettingsPage />
               </InventoryLayout>
             </ProtectedRoute>
           }

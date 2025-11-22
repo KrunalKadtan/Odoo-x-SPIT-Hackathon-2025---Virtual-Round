@@ -7,6 +7,8 @@ import { Dashboard } from './pages/Dashboard';
 import { InventoryDashboard } from './pages/InventoryDashboard';
 import { InventoryListView } from './pages/InventoryListView';
 import { InventoryFormView } from './pages/InventoryFormView';
+import { OperationsPage } from './pages/OperationsPage';
+import { StocksPage } from './pages/StocksPage';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { InventoryLayout } from './components/InventoryLayout';
 import { tokenManager } from './services/api';
@@ -57,6 +59,31 @@ function App() {
           }
         />
         
+        {/* Operations Page */}
+        <Route
+          path="/inventory/operations"
+          element={
+            <ProtectedRoute>
+              <InventoryLayout>
+                <OperationsPage />
+              </InventoryLayout>
+            </ProtectedRoute>
+          }
+        />
+        
+        {/* Stocks Page */}
+        <Route
+          path="/inventory/stocks"
+          element={
+            <ProtectedRoute>
+              <InventoryLayout>
+                <StocksPage />
+              </InventoryLayout>
+            </ProtectedRoute>
+          }
+        />
+        
+        {/* Receipts Routes */}
         <Route
           path="/inventory/receipts"
           element={
@@ -79,6 +106,7 @@ function App() {
           }
         />
         
+        {/* Deliveries Routes */}
         <Route
           path="/inventory/deliveries"
           element={

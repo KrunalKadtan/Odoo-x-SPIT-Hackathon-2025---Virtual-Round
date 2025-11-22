@@ -14,6 +14,8 @@ A comprehensive inventory management system for StockMaster with support for pro
 6. **StockMove** - Individual line items in pickings
 7. **Task** - Warehouse task management
 8. **StockQuant** - Real-time inventory levels by location
+9. **MoveHistory** - Audit trail of all inventory movements and status changes
+10. **WarehouseSettings** - Configurable warehouse parameters (singleton)
 
 ### API Endpoints
 
@@ -61,9 +63,9 @@ All endpoints are prefixed with `/api/inventory/`
 
 #### Pickings
 - `GET /pickings/` - List all pickings
-- `POST /pickings/` - Create a picking
+- `POST /pickings/` - Create a picking (supports nested stock moves)
 - `GET /pickings/{id}/` - Get picking details
-- `PUT /pickings/{id}/` - Update picking
+- `PUT /pickings/{id}/` - Update picking (supports nested stock moves)
 - `DELETE /pickings/{id}/` - Delete picking
 - `POST /pickings/{id}/confirm/` - Confirm a picking
 - `POST /pickings/{id}/validate/` - Validate and process stock movements
@@ -71,6 +73,183 @@ All endpoints are prefixed with `/api/inventory/`
 
 **Filters:** `status`, `operation_type`
 **Search:** `reference`, `partner`
+
+##### Nested Stock Moves Creation
+
+You can create a picking with all its stock moves in a single API call. This simplifies the workflow and ensures data consistency through atomic transactions.
+
+**Example Request (with nested stock_moves):**
+```bash
+POST /api/inventory/pickings/
+Content-Type: application/json
+
+{
+  "reference": "REC/001",
+  "partner": "Supplier ABC",
+  "operation_type": 1,
+  "source_location": 2,
+  "destination_location": 1,
+  "scheduled_date": "2025-11-22T10:00:00Z",
+  "notes": "Monthly stock receipt",
+  "stock_moves": [
+    {
+      "product": 3,
+      "quantity": "10.00",
+      "notes": "Batch A123"
+    },
+    {
+      "product": 4,
+      "quantity": "25.00",
+      "notes": "Batch B456"
+    }
+  ]
+}
+```
+
+**Example Response:**
+```json
+{
+  "id": 5,
+  "reference": "REC/001",
+  "partner": "Supplier ABC",
+  "operation_type": {
+    "id": 1,
+    "name": "Receipts",
+    "code": "receipt"
+  },
+  "source_location": {
+    "id": 2,
+    "name": "Suppliers"
+  },
+  "destination_location": {
+    "id": 1,
+    "name": "Main Warehouse / Stock"
+  },
+  "scheduled_date": "2025-11-22T10:00:00Z",
+  "status": "draft",
+  "notes": "Monthly stock receipt",
+  "stock_moves": [
+    {
+      "id": 10,
+      "product": {
+        "id": 3,
+        "sku": "LAP-001",
+        "name": "Laptop"
+      },
+      "quantity": "10.00",
+      "notes": "Batch A123",
+      "status": "draft"
+    },
+    {
+      "id": 11,
+      "product": {
+        "id": 4,
+        "sku": "MOU-001",
+        "name": "Mouse"
+      },
+      "quantity": "25.00",
+      "notes": "Batch B456",
+      "status": "draft"
+    }
+  ],
+  "created_at": "2025-11-22T09:45:00Z",
+  "updated_at": "2025-11-22T09:45:00Z"
+}
+```
+
+**Backward Compatibility:**
+The `stock_moves` field is optional. You can still create pickings without nested moves and add stock moves separately.
+
+**Example Request (without nested stock_moves):**
+```bash
+POST /api/inventory/pickings/
+Content-Type: application/json
+
+{
+  "reference": "REC/002",
+  "partner": "Supplier XYZ",
+  "operation_type": 1,
+  "source_location": 2,
+  "destination_location": 1,
+  "scheduled_date": "2025-11-23T10:00:00Z"
+}
+```
+
+##### Nested Stock Moves Updates
+
+You can update a picking and modify its stock moves in a single request. The system supports:
+- **Adding new moves**: Include moves without an `id` field
+- **Updating existing moves**: Include moves with an `id` field
+- **Removing moves**: Omit moves from the array (they will be deleted)
+
+**Example Request (updating with nested stock_moves):**
+```bash
+PUT /api/inventory/pickings/5/
+Content-Type: application/json
+
+{
+  "reference": "REC/001-UPDATED",
+  "partner": "Supplier ABC",
+  "operation_type": 1,
+  "source_location": 2,
+  "destination_location": 1,
+  "scheduled_date": "2025-11-22T10:00:00Z",
+  "notes": "Updated receipt",
+  "stock_moves": [
+    {
+      "id": 10,
+      "product": 3,
+      "quantity": "15.00",
+      "notes": "Batch A123 - Updated quantity"
+    },
+    {
+      "product": 5,
+      "quantity": "30.00",
+      "notes": "New product added"
+    }
+  ]
+}
+```
+
+In this example:
+- Move with `id: 10` is updated with new quantity and notes
+- Move with `id: 11` is removed (not included in the array)
+- A new move for product 5 is created (no `id` field)
+
+##### Validation Errors
+
+**Empty stock_moves array:**
+```json
+{
+  "stock_moves": ["At least one stock move is required"]
+}
+```
+
+**Invalid product ID:**
+```json
+{
+  "stock_moves": [
+    {},
+    {
+      "product": ["Product with id 999 does not exist"]
+    }
+  ]
+}
+```
+
+**Negative quantity:**
+```json
+{
+  "stock_moves": [
+    {
+      "quantity": ["Ensure this value is greater than or equal to 0."]
+    }
+  ]
+}
+```
+
+**Transaction Rollback:**
+If any stock move fails validation, the entire operation is rolled back. Neither the picking nor any stock moves will be created/updated.
 
 #### Stock Moves
 - `GET /stock-moves/` - List all stock moves
@@ -102,6 +281,145 @@ All endpoints are prefixed with `/api/inventory/`
 
 **Filters:** `product`, `location`
 **Search:** `product__sku`, `product__name`, `location__name`
+
+#### Move History
+- `GET /move-history/` - List all inventory movement history (read-only)
+- `GET /move-history/{id}/` - Get specific history record details
+
+**Filters:** `product`, `picking`, `action_type`, `user`, `date_from`, `date_to`
+**Search:** `picking__reference`, `product__sku`
+**Ordering:** `-timestamp` (newest first)
+
+History records are automatically created when:
+- Stock moves are validated (action_type: 'stock_move')
+- Picking status changes (action_type: 'status_change')
+
+**Example Request:**
+```bash
+GET /api/inventory/move-history/?product=3&date_from=2025-11-01&date_to=2025-11-30
+```
+
+**Example Response:**
+```json
+{
+  "count": 2,
+  "next": null,
+  "previous": null,
+  "results": [
+    {
+      "id": 1,
+      "timestamp": "2025-11-22T10:30:00Z",
+      "user": {
+        "id": 1,
+        "login_id": "admin01"
+      },
+      "action_type": "stock_move",
+      "picking": {
+        "id": 5,
+        "reference": "REC/001"
+      },
+      "product": {
+        "id": 3,
+        "sku": "LAP-001",
+        "name": "Laptop"
+      },
+      "quantity": "10.00",
+      "source_location": {
+        "id": 2,
+        "name": "Suppliers"
+      },
+      "destination_location": {
+        "id": 1,
+        "name": "Main Warehouse / Stock"
+      },
+      "old_status": null,
+      "new_status": null,
+      "notes": "Receipt validated"
+    },
+    {
+      "id": 2,
+      "timestamp": "2025-11-22T10:25:00Z",
+      "user": {
+        "id": 1,
+        "login_id": "admin01"
+      },
+      "action_type": "status_change",
+      "picking": {
+        "id": 5,
+        "reference": "REC/001"
+      },
+      "product": null,
+      "quantity": null,
+      "source_location": null,
+      "destination_location": null,
+      "old_status": "confirmed",
+      "new_status": "done",
+      "notes": "Picking validated"
+    }
+  ]
+}
+```
+
+#### Warehouse Settings
+- `GET /settings/` - Get current warehouse settings
+- `PUT /settings/` - Update all warehouse settings
+- `PATCH /settings/` - Partially update warehouse settings
+
+Settings are stored as a singleton (only one record exists). The `updated_by` field is automatically set to the current user.
+
+**Example Request:**
+```bash
+PUT /api/inventory/settings/
+Content-Type: application/json
+
+{
+  "low_stock_threshold": 15,
+  "default_receipt_location": 1,
+  "default_delivery_location": 3,
+  "default_adjustment_location": 6
+}
+```
+
+**Example Response:**
+```json
+{
+  "id": 1,
+  "low_stock_threshold": 15,
+  "default_receipt_location": {
+    "id": 1,
+    "name": "Main Warehouse / Stock",
+    "barcode": "LOC-STOCK"
+  },
+  "default_delivery_location": {
+    "id": 3,
+    "name": "Customers",
+    "barcode": "LOC-CUST"
+  },
+  "default_adjustment_location": {
+    "id": 6,
+    "name": "Inventory Adjustment",
+    "barcode": "LOC-ADJ"
+  },
+  "updated_at": "2025-11-22T10:30:00Z",
+  "updated_by": {
+    "id": 1,
+    "login_id": "admin01"
+  }
+}
+```
+
+**Validation Errors:**
+```json
+{
+  "default_receipt_location": ["Location with id 999 does not exist"]
+}
+```
+
+```json
+{
+  "low_stock_threshold": ["Ensure this value is greater than or equal to 0."]
+}
+```
 
 ## Admin Interface
 
@@ -157,6 +475,12 @@ The `populate_inventory` command creates:
 
 ### Receiving Stock (Receipt)
 
+**Option 1: Nested Write (Recommended)**
+1. Create a Picking with nested stock_moves in a single request
+2. Confirm the picking: `POST /api/inventory/pickings/{id}/confirm/`
+3. Validate to update stock: `POST /api/inventory/pickings/{id}/validate/`
+
+**Option 2: Separate Requests**
 1. Create a Picking with operation type "Receipts"
 2. Add StockMove lines for products being received
 3. Confirm the picking: `POST /api/inventory/pickings/{id}/confirm/`

@@ -9,11 +9,13 @@ from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Sum, Q
 from decimal import Decimal
-from .models import Category, Product, Location, OperationType, Picking, StockMove, Task, StockQuant
+import django_filters
+from django.utils.dateparse import parse_datetime
+from .models import Category, Product, Location, OperationType, Picking, StockMove, Task, StockQuant, MoveHistory, WarehouseSettings
 from .serializers import (
     CategorySerializer, ProductSerializer, LocationSerializer,
     OperationTypeSerializer, PickingSerializer, StockMoveSerializer,
-    TaskSerializer, StockQuantSerializer
+    TaskSerializer, StockQuantSerializer, MoveHistorySerializer, WarehouseSettingsSerializer
 )
 
 
@@ -300,6 +302,85 @@ class StockQuantViewSet(viewsets.ReadOnlyModelViewSet):
         serializer = self.get_serializer(out_of_stock, many=True)
         return Response(serializer.data)
 
+
+class MoveHistoryFilter(django_filters.FilterSet):
+    """Custom filter for MoveHistory with date range support."""
+    date_from = django_filters.DateTimeFilter(field_name='timestamp', lookup_expr='gte')
+    date_to = django_filters.DateTimeFilter(field_name='timestamp', lookup_expr='lte')
+    
+    class Meta:
+        model = MoveHistory
+        fields = ['product', 'picking', 'action_type', 'user']
+
+
+class MoveHistoryViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    ViewSet for MoveHistory model (read-only).
+    
+    Provides history tracking and audit logging for inventory movements.
+    """
+    queryset = MoveHistory.objects.select_related(
+        'user', 'picking', 'product', 'source_location', 'destination_location'
+    ).all()
+    serializer_class = MoveHistorySerializer
+    permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_class = MoveHistoryFilter
+    search_fields = ['picking__reference', 'product__sku']
+    ordering_fields = ['timestamp']
+    ordering = ['-timestamp']
+
+
+class WarehouseSettingsViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for WarehouseSettings model.
+    
+    Provides settings management with singleton pattern.
+    Only supports list, retrieve, update, and partial_update actions.
+    """
+    queryset = WarehouseSettings.objects.all()
+    serializer_class = WarehouseSettingsSerializer
+    permission_classes = [IsAuthenticated]
+    http_method_names = ['get', 'put', 'patch', 'head', 'options']
+    
+    def get_object(self):
+        """Override get_object to return singleton settings instance."""
+        return WarehouseSettings.get_settings()
+    
+    def list(self, request, *args, **kwargs):
+        """Override list to return single settings object (not array)."""
+        settings = self.get_object()
+        serializer = self.get_serializer(settings)
+        return Response(serializer.data)
+    
+    def perform_update(self, serializer):
+        """Set updated_by field to current user on update and validate location references."""
+        # Validate location references
+        validated_data = serializer.validated_data
+        
+        # Check default_receipt_location
+        receipt_location = validated_data.get('default_receipt_location')
+        if receipt_location and not Location.objects.filter(id=receipt_location.id).exists():
+            raise serializers.ValidationError({
+                'default_receipt_location': f'Location with id {receipt_location.id} does not exist.'
+            })
+        
+        # Check default_delivery_location
+        delivery_location = validated_data.get('default_delivery_location')
+        if delivery_location and not Location.objects.filter(id=delivery_location.id).exists():
+            raise serializers.ValidationError({
+                'default_delivery_location': f'Location with id {delivery_location.id} does not exist.'
+            })
+        
+        # Check default_adjustment_location
+        adjustment_location = validated_data.get('default_adjustment_location')
+        if adjustment_location and not Location.objects.filter(id=adjustment_location.id).exists():
+            raise serializers.ValidationError({
+                'default_adjustment_location': f'Location with id {adjustment_location.id} does not exist.'
+            })
+        
+        # Set updated_by to current user
+        serializer.save(updated_by=self.request.user)
 
 
 @api_view(['GET'])

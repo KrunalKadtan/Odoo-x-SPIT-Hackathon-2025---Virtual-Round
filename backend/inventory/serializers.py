@@ -3,7 +3,7 @@ Serializers for inventory API endpoints.
 """
 
 from rest_framework import serializers
-from .models import Category, Product, Location, OperationType, Picking, StockMove, Task, StockQuant
+from .models import Category, Product, Location, OperationType, Picking, StockMove, Task, StockQuant, MoveHistory, WarehouseSettings
 
 
 class CategorySerializer(serializers.ModelSerializer):
@@ -89,13 +89,33 @@ class StockMoveSerializer(serializers.ModelSerializer):
         }
 
 
+class StockMoveNestedSerializer(serializers.Serializer):
+    """Simplified serializer for nested stock move data in picking creation/updates."""
+    id = serializers.IntegerField(required=False, allow_null=True)
+    product = serializers.PrimaryKeyRelatedField(queryset=Product.objects.all())
+    quantity = serializers.DecimalField(max_digits=10, decimal_places=2)
+    notes = serializers.CharField(required=False, allow_blank=True, default='')
+    
+    def validate_product(self, value):
+        """Validate that product exists."""
+        if not Product.objects.filter(id=value.id).exists():
+            raise serializers.ValidationError(f"Product with id {value.id} does not exist.")
+        return value
+    
+    def validate_quantity(self, value):
+        """Validate that quantity is positive."""
+        if value <= 0:
+            raise serializers.ValidationError("Quantity must be positive.")
+        return value
+
+
 class PickingSerializer(serializers.ModelSerializer):
     """Serializer for Picking model."""
     operation_type_name = serializers.CharField(source='operation_type.name', read_only=True)
     source_location_name = serializers.CharField(source='source_location.name', read_only=True)
     destination_location_name = serializers.CharField(source='destination_location.name', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
-    stock_moves = StockMoveSerializer(many=True)
+    stock_moves = StockMoveNestedSerializer(many=True, required=False)
     stock_moves_count = serializers.SerializerMethodField()
     
     class Meta:
@@ -113,29 +133,11 @@ class PickingSerializer(serializers.ModelSerializer):
     def get_stock_moves_count(self, obj):
         return obj.stock_moves.count()
     
-    def validate(self, data):
-        """Validate nested stock_moves data."""
-        stock_moves_data = data.get('stock_moves', [])
-        
-        # Validate that stock_moves list is not empty
-        if not stock_moves_data:
-            raise serializers.ValidationError({
-                'stock_moves': 'At least one stock move is required.'
-            })
-        
-        # Validate each stock move has required fields
-        for idx, move_data in enumerate(stock_moves_data):
-            required_fields = ['product', 'quantity', 'source_location', 'destination_location']
-            missing_fields = [field for field in required_fields if field not in move_data]
-            
-            if missing_fields:
-                raise serializers.ValidationError({
-                    'stock_moves': {
-                        idx: {field: 'This field is required.' for field in missing_fields}
-                    }
-                })
-        
-        return data
+    def validate_stock_moves(self, value):
+        """Validate that at least one stock move is provided when stock_moves is present."""
+        if value is not None and len(value) == 0:
+            raise serializers.ValidationError("At least one stock move is required.")
+        return value
     
     def create(self, validated_data):
         """Create picking with nested stock moves in a transaction."""
@@ -149,8 +151,14 @@ class PickingSerializer(serializers.ModelSerializer):
             # Create the parent Picking first
             picking = Picking.objects.create(**validated_data)
             
-            # Create each StockMove linked to the parent Picking
+            # Loop through stock_moves and create StockMove instances
             for move_data in stock_moves_data:
+                # Set source_location and destination_location from picking
+                move_data['source_location'] = picking.source_location
+                move_data['destination_location'] = picking.destination_location
+                # Set status to match picking status
+                move_data['status'] = picking.status
+                # Create StockMove instance
                 StockMove.objects.create(picking=picking, **move_data)
         
         return picking
@@ -159,16 +167,17 @@ class PickingSerializer(serializers.ModelSerializer):
         """Update picking and handle nested stock moves modifications."""
         from django.db import transaction
         
-        # Extract stock_moves from validated_data
+        # Extract stock_moves from validated_data if present
         stock_moves_data = validated_data.pop('stock_moves', None)
         
+        # Use transaction.atomic() to wrap updates
         with transaction.atomic():
             # Update picking fields
             for attr, value in validated_data.items():
                 setattr(instance, attr, value)
             instance.save()
             
-            # Handle stock moves if provided
+            # Handle stock_moves updates: identify moves to add, update, or remove
             if stock_moves_data is not None:
                 # Get existing move IDs from the data
                 existing_move_ids = []
@@ -177,7 +186,7 @@ class PickingSerializer(serializers.ModelSerializer):
                     move_id = move_data.get('id')
                     
                     if move_id:
-                        # Update existing move
+                        # For existing moves (with id), update StockMove instances
                         try:
                             move = StockMove.objects.get(id=move_id, picking=instance)
                             for attr, value in move_data.items():
@@ -190,13 +199,17 @@ class PickingSerializer(serializers.ModelSerializer):
                                 'stock_moves': f'Stock move with id {move_id} does not exist for this picking.'
                             })
                     else:
-                        # Create new move
+                        # For new moves (no id), create StockMove instances
+                        move_data['source_location'] = instance.source_location
+                        move_data['destination_location'] = instance.destination_location
+                        move_data['status'] = instance.status
                         new_move = StockMove.objects.create(picking=instance, **move_data)
                         existing_move_ids.append(new_move.id)
                 
-                # Remove moves that are not in the updated list
+                # For removed moves, delete StockMove instances
                 instance.stock_moves.exclude(id__in=existing_move_ids).delete()
         
+        # Return updated picking with nested moves
         return instance
 
 
@@ -233,3 +246,167 @@ class StockQuantSerializer(serializers.ModelSerializer):
             'available_quantity', 'created_at', 'updated_at'
         ]
         read_only_fields = ['created_at', 'updated_at', 'available_quantity']
+
+
+
+class UserNestedSerializer(serializers.Serializer):
+    """Nested serializer for User model in read-only contexts."""
+    id = serializers.IntegerField(read_only=True)
+    login_id = serializers.CharField(read_only=True)
+    username = serializers.CharField(read_only=True)
+
+
+class MoveHistorySerializer(serializers.ModelSerializer):
+    """Serializer for MoveHistory model."""
+    user = UserNestedSerializer(read_only=True)
+    picking = serializers.SerializerMethodField()
+    product = serializers.SerializerMethodField()
+    source_location = serializers.SerializerMethodField()
+    destination_location = serializers.SerializerMethodField()
+    action_type_display = serializers.CharField(source='get_action_type_display', read_only=True)
+    action_display = serializers.CharField(source='get_action_display', read_only=True)
+    
+    class Meta:
+        model = MoveHistory
+        fields = [
+            'id', 'timestamp', 'user', 'action_type', 'action_type_display',
+            'action_display', 'picking', 'product', 'quantity',
+            'source_location', 'destination_location',
+            'old_status', 'new_status', 'notes'
+        ]
+        read_only_fields = [
+            'id', 'timestamp', 'user', 'action_type', 'action_type_display',
+            'action_display', 'picking', 'product', 'quantity',
+            'source_location', 'destination_location',
+            'old_status', 'new_status', 'notes'
+        ]
+    
+    def get_picking(self, obj):
+        """Return nested picking data."""
+        if obj.picking:
+            return {
+                'id': obj.picking.id,
+                'reference': obj.picking.reference
+            }
+        return None
+    
+    def get_product(self, obj):
+        """Return nested product data."""
+        if obj.product:
+            return {
+                'id': obj.product.id,
+                'sku': obj.product.sku,
+                'name': obj.product.name
+            }
+        return None
+    
+    def get_source_location(self, obj):
+        """Return nested source location data."""
+        if obj.source_location:
+            return {
+                'id': obj.source_location.id,
+                'name': obj.source_location.name
+            }
+        return None
+    
+    def get_destination_location(self, obj):
+        """Return nested destination location data."""
+        if obj.destination_location:
+            return {
+                'id': obj.destination_location.id,
+                'name': obj.destination_location.name
+            }
+        return None
+
+
+class WarehouseSettingsSerializer(serializers.ModelSerializer):
+    """Serializer for WarehouseSettings model."""
+    default_receipt_location = serializers.SerializerMethodField()
+    default_delivery_location = serializers.SerializerMethodField()
+    default_adjustment_location = serializers.SerializerMethodField()
+    updated_by = UserNestedSerializer(read_only=True)
+    
+    # Write fields for location IDs
+    default_receipt_location_id = serializers.PrimaryKeyRelatedField(
+        queryset=Location.objects.all(),
+        source='default_receipt_location',
+        required=False,
+        allow_null=True,
+        write_only=True
+    )
+    default_delivery_location_id = serializers.PrimaryKeyRelatedField(
+        queryset=Location.objects.all(),
+        source='default_delivery_location',
+        required=False,
+        allow_null=True,
+        write_only=True
+    )
+    default_adjustment_location_id = serializers.PrimaryKeyRelatedField(
+        queryset=Location.objects.all(),
+        source='default_adjustment_location',
+        required=False,
+        allow_null=True,
+        write_only=True
+    )
+    
+    class Meta:
+        model = WarehouseSettings
+        fields = [
+            'id', 'low_stock_threshold',
+            'default_receipt_location', 'default_receipt_location_id',
+            'default_delivery_location', 'default_delivery_location_id',
+            'default_adjustment_location', 'default_adjustment_location_id',
+            'updated_at', 'updated_by'
+        ]
+        read_only_fields = ['id', 'updated_at', 'updated_by']
+    
+    def get_default_receipt_location(self, obj):
+        """Return nested receipt location data."""
+        if obj.default_receipt_location:
+            return {
+                'id': obj.default_receipt_location.id,
+                'name': obj.default_receipt_location.name
+            }
+        return None
+    
+    def get_default_delivery_location(self, obj):
+        """Return nested delivery location data."""
+        if obj.default_delivery_location:
+            return {
+                'id': obj.default_delivery_location.id,
+                'name': obj.default_delivery_location.name
+            }
+        return None
+    
+    def get_default_adjustment_location(self, obj):
+        """Return nested adjustment location data."""
+        if obj.default_adjustment_location:
+            return {
+                'id': obj.default_adjustment_location.id,
+                'name': obj.default_adjustment_location.name
+            }
+        return None
+    
+    def validate_low_stock_threshold(self, value):
+        """Validate that low stock threshold is non-negative."""
+        if value < 0:
+            raise serializers.ValidationError("Low stock threshold must be non-negative.")
+        return value
+    
+    def validate_default_receipt_location_id(self, value):
+        """Validate that receipt location exists."""
+        if value and not Location.objects.filter(id=value.id).exists():
+            raise serializers.ValidationError(f"Location with id {value.id} does not exist.")
+        return value
+    
+    def validate_default_delivery_location_id(self, value):
+        """Validate that delivery location exists."""
+        if value and not Location.objects.filter(id=value.id).exists():
+            raise serializers.ValidationError(f"Location with id {value.id} does not exist.")
+        return value
+    
+    def validate_default_adjustment_location_id(self, value):
+        """Validate that adjustment location exists."""
+        if value and not Location.objects.filter(id=value.id).exists():
+            raise serializers.ValidationError(f"Location with id {value.id} does not exist.")
+        return value

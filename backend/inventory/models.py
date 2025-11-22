@@ -386,3 +386,165 @@ class StockQuant(models.Model):
     def available_quantity(self):
         """Calculate available quantity (total - reserved)."""
         return self.quantity - self.reserved_quantity
+
+
+class MoveHistory(models.Model):
+    """
+    Move history model for audit logging of inventory movements and status changes.
+    
+    Tracks all inventory movements and picking status changes for accountability.
+    """
+    ACTION_TYPES = [
+        ('stock_move', 'Stock Move'),
+        ('status_change', 'Status Change'),
+        ('adjustment', 'Adjustment'),
+    ]
+    
+    timestamp = models.DateTimeField(auto_now_add=True, db_index=True)
+    user = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='move_history'
+    )
+    action_type = models.CharField(max_length=20, choices=ACTION_TYPES)
+    picking = models.ForeignKey(
+        Picking,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='move_history',
+        db_index=True
+    )
+    product = models.ForeignKey(
+        Product,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='move_history',
+        db_index=True
+    )
+    quantity = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        null=True,
+        blank=True
+    )
+    source_location = models.ForeignKey(
+        Location,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='source_move_history'
+    )
+    destination_location = models.ForeignKey(
+        Location,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='destination_move_history'
+    )
+    old_status = models.CharField(max_length=20, blank=True)
+    new_status = models.CharField(max_length=20, blank=True)
+    notes = models.TextField(blank=True)
+    
+    class Meta:
+        db_table = 'move_history'
+        verbose_name = 'Move History'
+        verbose_name_plural = 'Move History'
+        ordering = ['-timestamp']
+        indexes = [
+            models.Index(fields=['-timestamp']),
+            models.Index(fields=['product']),
+            models.Index(fields=['picking']),
+        ]
+    
+    def __str__(self):
+        if self.action_type == 'stock_move' and self.product:
+            return f"{self.timestamp.strftime('%Y-%m-%d %H:%M')} - {self.product.sku} moved ({self.quantity})"
+        elif self.action_type == 'status_change' and self.picking:
+            return f"{self.timestamp.strftime('%Y-%m-%d %H:%M')} - {self.picking.reference} status: {self.old_status} → {self.new_status}"
+        return f"{self.timestamp.strftime('%Y-%m-%d %H:%M')} - {self.get_action_type_display()}"
+    
+    def get_action_display(self):
+        """Return formatted action description."""
+        if self.action_type == 'stock_move':
+            if self.product and self.source_location and self.destination_location:
+                return f"Moved {self.quantity} {self.product.sku} from {self.source_location.name} to {self.destination_location.name}"
+            elif self.product:
+                return f"Moved {self.quantity} {self.product.sku}"
+            return "Stock movement"
+        elif self.action_type == 'status_change':
+            if self.picking:
+                return f"{self.picking.reference} status changed from {self.old_status} to {self.new_status}"
+            return f"Status changed from {self.old_status} to {self.new_status}"
+        elif self.action_type == 'adjustment':
+            if self.product:
+                return f"Inventory adjustment for {self.product.sku}: {self.quantity}"
+            return "Inventory adjustment"
+        return self.get_action_type_display()
+
+
+class WarehouseSettings(models.Model):
+    """
+    Warehouse settings model for storing configurable warehouse parameters.
+    
+    Implements singleton pattern to ensure only one settings record exists.
+    """
+    low_stock_threshold = models.IntegerField(
+        default=10,
+        validators=[MinValueValidator(0)],
+        help_text="Threshold for low stock alerts"
+    )
+    default_receipt_location = models.ForeignKey(
+        Location,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='receipt_settings'
+    )
+    default_delivery_location = models.ForeignKey(
+        Location,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='delivery_settings'
+    )
+    default_adjustment_location = models.ForeignKey(
+        Location,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='adjustment_settings'
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+    updated_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='updated_settings'
+    )
+    
+    class Meta:
+        db_table = 'warehouse_settings'
+        verbose_name = 'Warehouse Settings'
+        verbose_name_plural = 'Warehouse Settings'
+    
+    def __str__(self):
+        return f"Warehouse Settings (Low Stock Threshold: {self.low_stock_threshold})"
+    
+    def save(self, *args, **kwargs):
+        """Override save to enforce singleton pattern."""
+        if not self.pk and WarehouseSettings.objects.exists():
+            # If trying to create a new record when one already exists, update the existing one
+            existing = WarehouseSettings.objects.first()
+            self.pk = existing.pk
+        super().save(*args, **kwargs)
+    
+    @classmethod
+    def get_settings(cls):
+        """Retrieve or create the singleton settings instance."""
+        settings, created = cls.objects.get_or_create(pk=1)
+        return settings

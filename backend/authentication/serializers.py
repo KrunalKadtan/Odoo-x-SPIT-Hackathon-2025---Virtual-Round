@@ -251,7 +251,6 @@ class PasswordResetRequestSerializer(serializers.Serializer):
         }
 
 
-
 class PasswordResetConfirmSerializer(serializers.Serializer):
     """
     Serializer for password reset confirmation.

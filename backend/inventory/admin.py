@@ -6,7 +6,7 @@ including inline editing for StockMove within Picking.
 """
 
 from django.contrib import admin
-from .models import Category, Product, Location, OperationType, Picking, StockMove, Task, StockQuant
+from .models import Category, Product, Location, OperationType, Picking, StockMove, Task, StockQuant, MoveHistory, WarehouseSettings
 
 
 class StockMoveInline(admin.TabularInline):
@@ -244,3 +244,122 @@ class StockQuantAdmin(admin.ModelAdmin):
 
 # Note: StockMove is NOT registered as a standalone admin
 # It is only accessible through the Picking admin via TabularInline
+
+
+@admin.register(MoveHistory)
+class MoveHistoryAdmin(admin.ModelAdmin):
+    """
+    Admin interface for MoveHistory model (Audit Log).
+    
+    Provides read-only access to inventory movement history and status changes.
+    All fields are read-only to maintain audit trail integrity.
+    """
+    
+    list_display = [
+        'timestamp',
+        'action_type',
+        'user',
+        'picking',
+        'product',
+        'quantity',
+        'source_location',
+        'destination_location',
+        'old_status',
+        'new_status'
+    ]
+    list_filter = ['action_type', 'timestamp', 'user']
+    search_fields = ['picking__reference', 'product__sku', 'product__name', 'notes']
+    readonly_fields = [
+        'timestamp',
+        'user',
+        'action_type',
+        'picking',
+        'product',
+        'quantity',
+        'source_location',
+        'destination_location',
+        'old_status',
+        'new_status',
+        'notes'
+    ]
+    date_hierarchy = 'timestamp'
+    
+    fieldsets = (
+        ('Action Information', {
+            'fields': ('timestamp', 'user', 'action_type')
+        }),
+        ('Related Records', {
+            'fields': ('picking', 'product')
+        }),
+        ('Movement Details', {
+            'fields': ('quantity', 'source_location', 'destination_location')
+        }),
+        ('Status Change Details', {
+            'fields': ('old_status', 'new_status')
+        }),
+        ('Additional Information', {
+            'fields': ('notes',)
+        }),
+    )
+    
+    def has_add_permission(self, request):
+        """Prevent manual creation of history records."""
+        return False
+    
+    def has_delete_permission(self, request, obj=None):
+        """Prevent deletion of history records to maintain audit trail."""
+        return False
+    
+    def has_change_permission(self, request, obj=None):
+        """Prevent modification of history records to maintain audit trail."""
+        return False
+
+
+@admin.register(WarehouseSettings)
+class WarehouseSettingsAdmin(admin.ModelAdmin):
+    """
+    Admin interface for WarehouseSettings model (Singleton).
+    
+    Manages warehouse configuration parameters. Only one settings record
+    can exist (singleton pattern).
+    """
+    
+    list_display = [
+        'low_stock_threshold',
+        'default_receipt_location',
+        'default_delivery_location',
+        'default_adjustment_location',
+        'updated_at',
+        'updated_by'
+    ]
+    readonly_fields = ['updated_at', 'updated_by']
+    autocomplete_fields = [
+        'default_receipt_location',
+        'default_delivery_location',
+        'default_adjustment_location'
+    ]
+    
+    fieldsets = (
+        ('Stock Thresholds', {
+            'fields': ('low_stock_threshold',)
+        }),
+        ('Default Locations', {
+            'fields': (
+                'default_receipt_location',
+                'default_delivery_location',
+                'default_adjustment_location'
+            )
+        }),
+        ('Metadata', {
+            'fields': ('updated_at', 'updated_by'),
+            'classes': ('collapse',)
+        }),
+    )
+    
+    def has_add_permission(self, request):
+        """Prevent creation of multiple settings records (singleton pattern)."""
+        return not WarehouseSettings.objects.exists()
+    
+    def has_delete_permission(self, request, obj=None):
+        """Prevent deletion of settings record."""
+        return False

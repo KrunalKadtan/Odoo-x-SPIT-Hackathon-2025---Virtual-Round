@@ -41,6 +41,14 @@ class Command(BaseCommand):
         customer_loc = Location.objects.create(name='Customer Locations', usage_type='customer')
         supplier_loc = Location.objects.create(name='Supplier Locations', usage_type='supplier')
         
+        # Create Virtual Locations parent and Inventory Adjustment location
+        virtual_locations = Location.objects.create(name='Virtual Locations', usage_type='inventory')
+        adjustment_loc = Location.objects.create(
+            name='Inventory Adjustment',
+            parent=virtual_locations,
+            usage_type='inventory'
+        )
+        
         self.stdout.write(self.style.SUCCESS(f'Created {Location.objects.count()} locations'))
         
         # Create Operation Types
@@ -70,6 +78,16 @@ class Command(BaseCommand):
             description='Internal warehouse transfers',
             default_source_location=shelf_a,
             default_destination_location=shelf_b
+        )
+        
+        # Create Inventory Adjustment operation type
+        adjustment_op = OperationType.objects.create(
+            name='Inventory Adjustment',
+            code='internal',
+            sequence_prefix='ADJ',
+            description='Inventory adjustments and corrections',
+            default_source_location=adjustment_loc,
+            default_destination_location=stock_zone
         )
         
         self.stdout.write(self.style.SUCCESS(f'Created {OperationType.objects.count()} operation types'))

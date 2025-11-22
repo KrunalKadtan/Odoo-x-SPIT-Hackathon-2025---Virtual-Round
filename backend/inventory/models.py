@@ -74,6 +74,11 @@ class Product(models.Model):
         validators=[MinValueValidator(Decimal('0.00'))]
     )
     barcode = models.CharField(max_length=100, blank=True, db_index=True)
+    uom = models.CharField(
+        max_length=50,
+        default='Units',
+        help_text="Unit of Measure (e.g., kg, pcs, dozen, liters)"
+    )
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

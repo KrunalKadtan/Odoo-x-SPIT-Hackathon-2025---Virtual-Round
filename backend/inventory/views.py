@@ -3,11 +3,12 @@ API views for inventory management.
 """
 
 from rest_framework import viewsets, filters, status
-from rest_framework.decorators import action
+from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Sum, Q
+from decimal import Decimal
 from .models import Category, Product, Location, OperationType, Picking, StockMove, Task, StockQuant
 from .serializers import (
     CategorySerializer, ProductSerializer, LocationSerializer,
@@ -148,6 +149,28 @@ class PickingViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
+        # Check stock availability for outgoing operations
+        if picking.operation_type.code == 'outgoing':
+            for move in picking.stock_moves.all():
+                # Query current stock at source location
+                quant = StockQuant.objects.filter(
+                    product=move.product,
+                    location=move.source_location
+                ).first()
+                
+                # Treat as zero if no StockQuant record exists
+                available = quant.quantity if quant else Decimal('0.00')
+                
+                # Check if sufficient stock is available
+                if available < move.quantity:
+                    return Response({
+                        'error': f'Insufficient stock for {move.product.name}',
+                        'product': move.product.sku,
+                        'required': str(move.quantity),
+                        'available': str(available),
+                        'location': move.source_location.name
+                    }, status=status.HTTP_400_BAD_REQUEST)
+        
         # Update stock quantities for each stock move
         for move in picking.stock_moves.all():
             # Decrease quantity at source location
@@ -276,3 +299,40 @@ class StockQuantViewSet(viewsets.ReadOnlyModelViewSet):
         out_of_stock = self.queryset.filter(quantity=0)
         serializer = self.get_serializer(out_of_stock, many=True)
         return Response(serializer.data)
+
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def dashboard_stats(request):
+    """
+    Get dashboard statistics including total products, low stock items,
+    pending receipts, and pending deliveries.
+    """
+    # Calculate total active products
+    total_products = Product.objects.filter(is_active=True).count()
+    
+    # Calculate low stock items (quantity < 10 and > 0)
+    low_stock_items = StockQuant.objects.filter(
+        quantity__lt=10,
+        quantity__gt=0
+    ).count()
+    
+    # Calculate pending receipts (incoming pickings in draft/confirmed/assigned status)
+    pending_receipts = Picking.objects.filter(
+        operation_type__code='incoming',
+        status__in=['draft', 'confirmed', 'assigned']
+    ).count()
+    
+    # Calculate pending deliveries (outgoing pickings in draft/confirmed/assigned status)
+    pending_deliveries = Picking.objects.filter(
+        operation_type__code='outgoing',
+        status__in=['draft', 'confirmed', 'assigned']
+    ).count()
+    
+    return Response({
+        'total_products': total_products,
+        'low_stock_items': low_stock_items,
+        'pending_receipts': pending_receipts,
+        'pending_deliveries': pending_deliveries,
+    })

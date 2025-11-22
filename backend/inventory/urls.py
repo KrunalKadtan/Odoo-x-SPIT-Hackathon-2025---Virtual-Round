@@ -4,6 +4,7 @@ URL configuration for inventory API endpoints.
 
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
+from . import views
 from .views import (
     CategoryViewSet, ProductViewSet, LocationViewSet,
     OperationTypeViewSet, PickingViewSet, StockMoveViewSet,
@@ -22,4 +23,5 @@ router.register(r'stock-quants', StockQuantViewSet, basename='stockquant')
 
 urlpatterns = [
     path('', include(router.urls)),
+    path('dashboard-stats/', views.dashboard_stats, name='dashboard-stats'),
 ]

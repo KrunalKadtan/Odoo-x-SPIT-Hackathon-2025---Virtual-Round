@@ -15,6 +15,7 @@ export function InventoryFormView({ type }) {
 
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
+  const [loadingData, setLoadingData] = useState(true); // Loading state for data fetching
   const [formData, setFormData] = useState({
     reference: '',
     partner: '',
@@ -30,6 +31,55 @@ export function InventoryFormView({ type }) {
   const [operationTypes, setOperationTypes] = useState([]);
   const [currentStatus, setCurrentStatus] = useState('draft');
 
+  // Centralized error handling function
+  const handleAPIError = (error) => {
+    console.error('API Error:', error);
+    
+    const errorData = error.response?.data;
+    
+    // Handle network errors (no response from server)
+    if (!errorData) {
+      alert('❌ Network error. Please check your connection.');
+      return;
+    }
+    
+    // Handle validation errors from backend (errorData.details)
+    if (errorData.details) {
+      const errorMessages = [];
+      Object.entries(errorData.details).forEach(([field, messages]) => {
+        // Format field names: convert snake_case to Title Case
+        const fieldName = field
+          .split('_')
+          .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+          .join(' ')
+          .toUpperCase();
+        
+        // Handle both array and string message formats
+        const messageList = Array.isArray(messages) ? messages : [messages];
+        errorMessages.push(`${fieldName}: ${messageList.join(', ')}`);
+      });
+      
+      alert(`❌ Validation Error:\n\n${errorMessages.join('\n')}`);
+      return;
+    }
+    
+    // Handle insufficient stock errors with detailed information
+    if (errorData.error && errorData.product) {
+      alert(
+        `❌ Insufficient Stock\n\n` +
+        `Product: ${errorData.product}\n` +
+        `Required: ${errorData.required}\n` +
+        `Available: ${errorData.available}\n` +
+        `Location: ${errorData.location}\n\n` +
+        `Please adjust the quantity or check stock levels.`
+      );
+      return;
+    }
+    
+    // Generic error fallback
+    alert(`❌ Error: ${errorData.error || 'Something went wrong. Please try again.'}`);
+  };
+
   useEffect(() => {
     fetchData();
     if (!isNew) {
@@ -39,6 +89,7 @@ export function InventoryFormView({ type }) {
 
   const fetchData = async () => {
     try {
+      setLoadingData(true); // Set loading state during data fetching
       const [productsData, locationsData, operationTypesData] = await Promise.all([
         inventoryAPI.getProducts(),
         inventoryAPI.getLocations(),
@@ -66,7 +117,9 @@ export function InventoryFormView({ type }) {
         }
       }
     } catch (error) {
-      console.error('Error fetching data:', error);
+      handleAPIError(error);
+    } finally {
+      setLoadingData(false); // Clear loading state after data is fetched
     }
   };
 
@@ -85,7 +138,7 @@ export function InventoryFormView({ type }) {
       setStockMoves(data.stock_moves || []);
       setCurrentStatus(data.status);
     } catch (error) {
-      console.error('Error fetching picking:', error);
+      handleAPIError(error);
     } finally {
       setLoading(false);
     }
@@ -104,7 +157,7 @@ export function InventoryFormView({ type }) {
     setStockMoves(prev => [...prev, {
       id: `temp-${Date.now()}`,
       product: '',
-      quantity: 1,
+      quantity: 1, // Initialize as number 1
       isNew: true
     }]);
   };
@@ -112,142 +165,160 @@ export function InventoryFormView({ type }) {
   const updateStockMove = (index, field, value) => {
     setStockMoves(prev => {
       const updated = [...prev];
-      updated[index] = { ...updated[index], [field]: value };
+      if (field === 'quantity') {
+        // Parse as float and validate it's a positive number
+        const numValue = parseFloat(value);
+        updated[index] = { 
+          ...updated[index], 
+          [field]: isNaN(numValue) || numValue <= 0 ? '' : numValue 
+        };
+      } else {
+        updated[index] = { ...updated[index], [field]: value };
+      }
       return updated;
     });
   };
 
-  const removeStockMove = async (index) => {
-    const move = stockMoves[index];
-    if (!move.isNew && move.id) {
-      try {
-        await inventoryAPI.deleteStockMove(move.id);
-      } catch (error) {
-        console.error('Error deleting stock move:', error);
-      }
-    }
+  const removeStockMove = (index) => {
+    // Remove stock move from state array
+    // Deletion is handled through nested write (excluded moves are deleted)
     setStockMoves(prev => prev.filter((_, i) => i !== index));
   };
 
+  const validateForm = () => {
+    const errors = [];
+    
+    // Validate source location is selected
+    if (!formData.source_location) {
+      errors.push('SOURCE LOCATION: This field is required');
+    }
+    
+    // Validate destination location is selected
+    if (!formData.destination_location) {
+      errors.push('DESTINATION LOCATION: This field is required');
+    }
+    
+    // Validate at least one stock move exists
+    if (stockMoves.length === 0) {
+      errors.push('PRODUCT LINES: At least one product line is required');
+    }
+    
+    // Validate each stock move has product selected and valid quantity
+    stockMoves.forEach((move, index) => {
+      const lineNumber = index + 1;
+      
+      if (!move.product) {
+        errors.push(`PRODUCT LINE ${lineNumber}: Product selection is required`);
+      }
+      
+      if (!move.quantity || move.quantity <= 0) {
+        errors.push(`PRODUCT LINE ${lineNumber}: Valid quantity (greater than 0) is required`);
+      }
+    });
+    
+    return errors;
+  };
+
   const handleSave = async () => {
+    // Call validateForm before API calls
+    const validationErrors = validateForm();
+    if (validationErrors.length > 0) {
+      // Display validation errors in alert with clear field names
+      alert(`❌ Validation Error:\n\n${validationErrors.join('\n')}`);
+      return;
+    }
+
     try {
       setSaving(true);
       
-      // Validate that we have at least one stock move
-      if (stockMoves.length === 0) {
-        alert('Please add at least one product line before saving.');
-        return;
-      }
-
-      // Validate that all stock moves have required fields
-      const invalidMoves = stockMoves.filter(m => !m.product || !m.quantity || m.quantity <= 0);
-      if (invalidMoves.length > 0) {
-        alert('Please ensure all product lines have a product selected and a valid quantity.');
-        return;
-      }
+      // Build picking data with nested stock_moves
+      const pickingData = {
+        reference: formData.reference || undefined,
+        partner: formData.partner,
+        scheduled_date: formData.scheduled_date,
+        source_location: parseInt(formData.source_location),
+        destination_location: parseInt(formData.destination_location),
+        operation_type: parseInt(formData.operation_type),
+        notes: formData.notes,
+        stock_moves: stockMoves.map(move => {
+          const moveData = {
+            product: parseInt(move.product),
+            quantity: parseFloat(move.quantity),
+            notes: move.notes || ''
+          };
+          
+          // Include id for existing moves (not new ones)
+          if (!move.isNew && move.id && typeof move.id === 'number') {
+            moveData.id = move.id;
+          }
+          
+          return moveData;
+        })
+      };
       
       if (isNew) {
-        // Create new picking
-        const pickingData = {
-          ...formData,
-          status: 'draft'
-        };
-        const newPicking = await inventoryAPI.createPicking(pickingData);
+        // Create new picking with nested write format
+        pickingData.status = 'draft';
+        await inventoryAPI.createPicking(pickingData);
         
-        // Create stock moves
-        for (const move of stockMoves) {
-          if (move.product && move.quantity) {
-            await inventoryAPI.createStockMove({
-              picking: newPicking.id,
-              product: move.product,
-              quantity: move.quantity,
-              source_location: formData.source_location,
-              destination_location: formData.destination_location,
-              status: 'draft'
-            });
-          }
-        }
-        
-        alert('Picking created successfully!');
-        navigate(`/inventory/${type}/${newPicking.id}`);
+        // Add success message with checkmark emoji
+        alert('✅ Success!\n\nPicking created successfully!');
+        navigate(`/inventory/${type}`);
       } else {
-        // Update existing picking
-        await inventoryAPI.updatePicking(id, formData);
+        // Update existing picking with nested write format
+        await inventoryAPI.updatePicking(id, pickingData);
         
-        // Update stock moves
-        for (const move of stockMoves) {
-          if (move.isNew && move.product && move.quantity) {
-            await inventoryAPI.createStockMove({
-              picking: id,
-              product: move.product,
-              quantity: move.quantity,
-              source_location: formData.source_location,
-              destination_location: formData.destination_location,
-              status: currentStatus
-            });
-          } else if (!move.isNew && move.id) {
-            await inventoryAPI.updateStockMove(move.id, {
-              product: move.product,
-              quantity: move.quantity
-            });
-          }
-        }
-        
-        alert('Picking updated successfully!');
+        // Add success message with checkmark emoji
+        alert('✅ Success!\n\nPicking updated successfully!');
         await fetchPicking();
       }
     } catch (error) {
-      console.error('Error saving:', error);
-      const errorData = error.response?.data;
-      
-      if (errorData?.details) {
-        // Handle validation errors
-        const errorMessages = Object.entries(errorData.details)
-          .map(([field, messages]) => `${field}: ${Array.isArray(messages) ? messages.join(', ') : messages}`)
-          .join('\n');
-        alert(`Validation Error:\n\n${errorMessages}`);
-      } else {
-        alert(errorData?.error || 'Error saving picking. Please try again.');
-      }
+      handleAPIError(error);
     } finally {
       setSaving(false);
     }
   };
 
   const handleValidate = async () => {
+    // Add confirmation dialog before validation
+    if (!window.confirm('Validate this picking? This will update stock levels and cannot be undone.')) {
+      return;
+    }
+    
     try {
+      // Call inventoryAPI.validatePicking(id)
       await inventoryAPI.validatePicking(id);
-      alert('Picking validated successfully! Stock has been updated.');
+      
+      // Handle success response with success message with checkmark emoji
+      alert('✅ Success!\n\nPicking validated successfully! Stock has been updated.');
+      
+      // Refresh picking data after successful validation
       await fetchPicking();
     } catch (error) {
-      console.error('Error validating:', error);
-      const errorData = error.response?.data;
-      
-      // Check for insufficient stock error
-      if (errorData?.error && errorData?.product) {
-        alert(
-          `❌ Insufficient Stock\n\n` +
-          `Product: ${errorData.product}\n` +
-          `Required: ${errorData.required}\n` +
-          `Available: ${errorData.available}\n` +
-          `Location: ${errorData.location}\n\n` +
-          `Please adjust the quantity or check stock levels.`
-        );
-      } else {
-        alert(errorData?.error || 'Error validating picking. Please try again.');
-      }
+      // Use handleAPIError for error handling
+      // Display insufficient stock errors with detailed information
+      handleAPIError(error);
     }
   };
 
   const handleCancel = async () => {
-    if (window.confirm('Are you sure you want to cancel this picking?')) {
-      try {
-        await inventoryAPI.cancelPicking(id);
-        await fetchPicking();
-      } catch (error) {
-        console.error('Error cancelling:', error);
-        alert('Error cancelling picking');
-      }
+    // Add confirmation dialog before cancellation
+    if (!window.confirm('Cancel this picking? This action cannot be undone.')) {
+      return;
+    }
+    
+    try {
+      // Update handleCancel to call inventoryAPI.cancelPicking(id)
+      await inventoryAPI.cancelPicking(id);
+      
+      // Handle success response with success message with checkmark emoji
+      alert('✅ Success!\n\nPicking cancelled.');
+      
+      // Refresh picking data after successful cancellation
+      await fetchPicking();
+    } catch (error) {
+      // Use handleAPIError for error handling
+      handleAPIError(error);
     }
   };
 
@@ -263,6 +334,16 @@ export function InventoryFormView({ type }) {
 
   if (loading) {
     return <div className="loading-container">Loading...</div>;
+  }
+
+  // Display loading indicator while data is being fetched
+  if (loadingData) {
+    return (
+      <div className="loading-container">
+        <div className="loading-spinner"></div>
+        <p>Loading data...</p>
+      </div>
+    );
   }
 
   return (
@@ -297,7 +378,7 @@ export function InventoryFormView({ type }) {
                 Validate
               </Button>
             )}
-            <Button variant="outline" onClick={handleSave} disabled={saving}>
+            <Button variant="outline" onClick={handleSave} disabled={saving || loadingData}>
               <svg className="button-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
               </svg>
@@ -386,20 +467,18 @@ export function InventoryFormView({ type }) {
                 value={formData.source_location}
                 onValueChange={(value) => handleSelectChange('source_location', value)}
               >
-                {({ value, onChange }) => (
-                  <SelectTrigger value={value} onChange={onChange}>
-                    <SelectValue placeholder="Select location">
-                      <SelectContent>
-                        {locations.map(loc => (
-                          <SelectItem key={loc.id} value={loc.id}>
-                            {loc.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                      {locations.find(l => l.id === value)?.name || 'Select location'}
-                    </SelectValue>
-                  </SelectTrigger>
-                )}
+                <SelectTrigger>
+                  <SelectValue placeholder="Select location">
+                    {locations.find(l => l.id === formData.source_location)?.name}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {locations.map(loc => (
+                    <SelectItem key={loc.id} value={loc.id}>
+                      {loc.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
               </Select>
             </div>
 
@@ -409,20 +488,18 @@ export function InventoryFormView({ type }) {
                 value={formData.destination_location}
                 onValueChange={(value) => handleSelectChange('destination_location', value)}
               >
-                {({ value, onChange }) => (
-                  <SelectTrigger value={value} onChange={onChange}>
-                    <SelectValue placeholder="Select location">
-                      <SelectContent>
-                        {locations.map(loc => (
-                          <SelectItem key={loc.id} value={loc.id}>
-                            {loc.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                      {locations.find(l => l.id === value)?.name || 'Select location'}
-                    </SelectValue>
-                  </SelectTrigger>
-                )}
+                <SelectTrigger>
+                  <SelectValue placeholder="Select location">
+                    {locations.find(l => l.id === formData.destination_location)?.name}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {locations.map(loc => (
+                    <SelectItem key={loc.id} value={loc.id}>
+                      {loc.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
               </Select>
             </div>
           </div>
@@ -447,32 +524,30 @@ export function InventoryFormView({ type }) {
                         value={move.product}
                         onValueChange={(value) => updateStockMove(index, 'product', value)}
                       >
-                        {({ value, onChange }) => (
-                          <SelectTrigger value={value} onChange={onChange}>
-                            <SelectValue placeholder="Select product">
-                              <SelectContent>
-                                {products.map(prod => (
-                                  <SelectItem key={prod.id} value={prod.id}>
-                                    {prod.sku} - {prod.name} ({prod.uom || 'Units'})
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                              {(() => {
-                                const selectedProduct = products.find(p => p.id === value);
-                                return selectedProduct 
-                                  ? `${selectedProduct.sku} - ${selectedProduct.name} (${selectedProduct.uom || 'Units'})`
-                                  : 'Select product';
-                              })()}
-                            </SelectValue>
-                          </SelectTrigger>
-                        )}
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select product">
+                            {(() => {
+                              const selectedProduct = products.find(p => p.id === move.product);
+                              return selectedProduct 
+                                ? `${selectedProduct.sku} - ${selectedProduct.name} (${selectedProduct.uom || 'Units'})`
+                                : null;
+                            })()}
+                          </SelectValue>
+                        </SelectTrigger>
+                        <SelectContent>
+                          {products.map(prod => (
+                            <SelectItem key={prod.id} value={prod.id}>
+                              {prod.sku} - {prod.name} ({prod.uom || 'Units'})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
                       </Select>
                     </TableCell>
                     <TableCell>
                       <Input 
                         type="number" 
                         value={move.quantity}
-                        onChange={(e) => updateStockMove(index, 'quantity', parseFloat(e.target.value))}
+                        onChange={(e) => updateStockMove(index, 'quantity', e.target.value)}
                         min="0.01"
                         step="0.01"
                         className="quantity-input"

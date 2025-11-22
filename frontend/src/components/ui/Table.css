@@ -1,7 +1,7 @@
 .table-container {
   position: relative;
   width: 100%;
-  overflow-x: auto;
+  overflow: visible;
 }
 
 .table {
@@ -32,6 +32,7 @@
 .table-row {
   border-bottom: 1px solid #e2e8f0;
   transition: background-color 0.15s;
+  position: relative;
 }
 
 .table-row:hover {
@@ -56,6 +57,8 @@
   padding: 0.5rem;
   vertical-align: middle;
   white-space: nowrap;
+  overflow: visible;
+  position: relative;
 }
 
 .table-caption {

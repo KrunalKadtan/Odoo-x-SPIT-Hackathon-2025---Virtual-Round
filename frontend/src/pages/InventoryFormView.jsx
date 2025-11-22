@@ -96,6 +96,10 @@ export function InventoryFormView({ type }) {
         inventoryAPI.getOperationTypes()
       ]);
 
+      console.log('Fetched products:', productsData);
+      console.log('Fetched locations:', locationsData);
+      console.log('Fetched operation types:', operationTypesData);
+
       setProducts(productsData);
       setLocations(locationsData);
       setOperationTypes(operationTypesData);
@@ -507,6 +511,9 @@ export function InventoryFormView({ type }) {
           {/* Product Lines Section */}
           <div className="product-lines-section">
             <h3 className="section-title">Product Lines</h3>
+            {loadingData && <p style={{ color: '#94a3b8', fontSize: '0.875rem' }}>Loading products...</p>}
+            {!loadingData && products.length === 0 && <p style={{ color: '#ef4444', fontSize: '0.875rem' }}>⚠️ No products found. Please add products first.</p>}
+            {!loadingData && products.length > 0 && <p style={{ color: '#10b981', fontSize: '0.875rem' }}>✓ {products.length} products available</p>}
             
             <Table>
               <TableHeader>
@@ -535,11 +542,17 @@ export function InventoryFormView({ type }) {
                           </SelectValue>
                         </SelectTrigger>
                         <SelectContent>
-                          {products.map(prod => (
-                            <SelectItem key={prod.id} value={prod.id}>
-                              {prod.sku} - {prod.name} ({prod.uom || 'Units'})
-                            </SelectItem>
-                          ))}
+                          {products.length === 0 ? (
+                            <div style={{ padding: '0.5rem', textAlign: 'center', color: '#94a3b8' }}>
+                              No products available
+                            </div>
+                          ) : (
+                            products.map(prod => (
+                              <SelectItem key={prod.id} value={prod.id}>
+                                {prod.sku} - {prod.name} ({prod.uom || 'Units'})
+                              </SelectItem>
+                            ))
+                          )}
                         </SelectContent>
                       </Select>
                     </TableCell>

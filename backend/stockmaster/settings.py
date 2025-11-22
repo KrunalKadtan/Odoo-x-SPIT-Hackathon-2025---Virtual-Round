@@ -42,6 +42,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'rest_framework_simplejwt',
     'corsheaders',
+    'authentication',
 ]
 
 MIDDLEWARE = [
@@ -110,7 +111,13 @@ AUTH_PASSWORD_VALIDATORS = [
     {
         'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
     },
+    {
+        'NAME': 'authentication.validators.PasswordComplexityValidator',
+    },
 ]
+
+# Custom User Model
+AUTH_USER_MODEL = 'authentication.User'
 
 # Password Hashers - Argon2 as primary
 PASSWORD_HASHERS = [

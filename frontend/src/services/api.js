@@ -142,6 +142,11 @@ export const inventoryAPI = {
     return response.data;
   },
 
+  createCategory: async (data) => {
+    const response = await api.post('/inventory/categories/', data);
+    return response.data;
+  },
+
   // Products
   getProducts: async (params = {}) => {
     const response = await api.get('/inventory/products/', { params });
@@ -158,9 +163,34 @@ export const inventoryAPI = {
     return response.data;
   },
 
+  updateProduct: async (id, data) => {
+    const response = await api.put(`/inventory/products/${id}/`, data);
+    return response.data;
+  },
+
+  deleteProduct: async (id) => {
+    const response = await api.delete(`/inventory/products/${id}/`);
+    return response.data;
+  },
+
   // Locations
   getLocations: async (params = {}) => {
     const response = await api.get('/inventory/locations/', { params });
+    return response.data;
+  },
+
+  createLocation: async (data) => {
+    const response = await api.post('/inventory/locations/', data);
+    return response.data;
+  },
+
+  updateLocation: async (id, data) => {
+    const response = await api.put(`/inventory/locations/${id}/`, data);
+    return response.data;
+  },
+
+  deleteLocation: async (id) => {
+    const response = await api.delete(`/inventory/locations/${id}/`);
     return response.data;
   },
 

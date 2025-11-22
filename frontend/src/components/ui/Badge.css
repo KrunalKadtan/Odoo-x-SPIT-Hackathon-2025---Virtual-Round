@@ -1,0 +1,77 @@
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.375rem;
+  border: 1px solid;
+  padding: 0.125rem 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  width: fit-content;
+  white-space: nowrap;
+  flex-shrink: 0;
+  gap: 0.25rem;
+  transition: color 0.15s, box-shadow 0.15s;
+}
+
+/* Variants */
+.badge-default {
+  border-color: transparent;
+  background-color: #2563eb;
+  color: white;
+}
+
+.badge-secondary {
+  border-color: transparent;
+  background-color: #f1f5f9;
+  color: #0f172a;
+}
+
+.badge-destructive {
+  border-color: transparent;
+  background-color: #ef4444;
+  color: white;
+}
+
+.badge-outline {
+  color: #0f172a;
+  border-color: #e2e8f0;
+  background-color: transparent;
+}
+
+/* Custom status colors */
+.badge-draft {
+  background-color: #f1f5f9;
+  color: #334155;
+  border-color: #e2e8f0;
+}
+
+.badge-waiting {
+  background-color: #fef3c7;
+  color: #92400e;
+  border-color: #fde68a;
+}
+
+.badge-ready {
+  background-color: #d1fae5;
+  color: #065f46;
+  border-color: #a7f3d0;
+}
+
+.badge-done {
+  background-color: #dbeafe;
+  color: #1e40af;
+  border-color: #bfdbfe;
+}
+
+.badge-confirmed {
+  background-color: #e0e7ff;
+  color: #3730a3;
+  border-color: #c7d2fe;
+}
+
+.badge-cancelled {
+  background-color: #fee2e2;
+  color: #991b1b;
+  border-color: #fecaca;
+}

@@ -1,0 +1,142 @@
+.inventory-dashboard {
+  padding: 2rem;
+}
+
+.dashboard-header {
+  margin-bottom: 2rem;
+}
+
+.dashboard-title {
+  font-size: 1.875rem;
+  color: #0f172a;
+  margin-bottom: 0.5rem;
+  font-weight: 600;
+}
+
+.dashboard-subtitle {
+  color: #64748b;
+  font-size: 1rem;
+}
+
+.dashboard-grid {
+  display: grid;
+  gap: 1.5rem;
+  max-width: 64rem;
+}
+
+@media (min-width: 768px) {
+  .dashboard-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.dashboard-card {
+  padding: 1.5rem;
+  cursor: pointer;
+  border: 1px solid #e2e8f0;
+  transition: box-shadow 0.15s, transform 0.15s;
+}
+
+.dashboard-card:hover {
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
+  transform: translateY(-2px);
+}
+
+.card-icon-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.icon-wrapper {
+  padding: 0.75rem;
+  border-radius: 0.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.icon-wrapper.green {
+  background-color: #d1fae5;
+}
+
+.icon-wrapper.blue {
+  background-color: #dbeafe;
+}
+
+.icon {
+  width: 1.5rem;
+  height: 1.5rem;
+}
+
+.icon-wrapper.green .icon {
+  color: #059669;
+}
+
+.icon-wrapper.blue .icon {
+  color: #2563eb;
+}
+
+.card-label {
+  font-size: 0.875rem;
+  color: #64748b;
+}
+
+.card-stats {
+  margin-bottom: 1rem;
+}
+
+.stat-number {
+  font-size: 2.25rem;
+  color: #0f172a;
+  margin-bottom: 0.25rem;
+  font-weight: 600;
+}
+
+.stat-label {
+  color: #475569;
+  font-size: 1rem;
+}
+
+.card-indicators {
+  display: flex;
+  gap: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid #f1f5f9;
+  flex-wrap: wrap;
+}
+
+.indicator {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.indicator-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 9999px;
+}
+
+.indicator-dot.red {
+  background-color: #ef4444;
+}
+
+.indicator-dot.amber {
+  background-color: #f59e0b;
+}
+
+.indicator-dot.gray {
+  background-color: #94a3b8;
+}
+
+.indicator-text {
+  font-size: 0.875rem;
+  color: #475569;
+}
+
+.indicator-value {
+  color: #0f172a;
+  font-weight: 500;
+}

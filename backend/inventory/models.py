@@ -197,7 +197,7 @@ class Picking(models.Model):
         ('cancelled', 'Cancelled'),
     ]
     
-    reference = models.CharField(max_length=50, unique=True, db_index=True)
+    reference = models.CharField(max_length=50, unique=True, db_index=True, blank=True)
     partner = models.CharField(max_length=200, blank=True)
     operation_type = models.ForeignKey(
         OperationType,
@@ -232,6 +232,31 @@ class Picking(models.Model):
         verbose_name = 'Picking'
         verbose_name_plural = 'Pickings'
         ordering = ['-scheduled_date']
+    
+    def save(self, *args, **kwargs):
+        """Auto-generate reference if not provided."""
+        if not self.reference:
+            # Generate reference based on operation type prefix and sequence
+            prefix = self.operation_type.sequence_prefix if self.operation_type else 'PICK'
+            # Get the last picking with this prefix
+            last_picking = Picking.objects.filter(
+                reference__startswith=prefix
+            ).order_by('-id').first()
+            
+            if last_picking and last_picking.reference:
+                # Extract number from last reference
+                try:
+                    last_num = int(last_picking.reference.replace(prefix, ''))
+                    next_num = last_num + 1
+                except (ValueError, AttributeError):
+                    next_num = 1
+            else:
+                next_num = 1
+            
+            # Generate new reference with zero-padding
+            self.reference = f"{prefix}{next_num:05d}"
+        
+        super().save(*args, **kwargs)
     
     def __str__(self):
         return f"{self.reference} - {self.partner}"

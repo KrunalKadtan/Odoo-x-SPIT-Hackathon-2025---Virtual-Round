@@ -34,6 +34,8 @@ export function InventoryFormView({ type }) {
   // Centralized error handling function
   const handleAPIError = (error) => {
     console.error('API Error:', error);
+    console.error('Error response:', error.response);
+    console.error('Error data:', error.response?.data);
     
     const errorData = error.response?.data;
     
@@ -237,7 +239,6 @@ export function InventoryFormView({ type }) {
       
       // Build picking data with nested stock_moves
       const pickingData = {
-        reference: formData.reference || undefined,
         partner: formData.partner,
         scheduled_date: formData.scheduled_date,
         source_location: parseInt(formData.source_location),
@@ -259,6 +260,13 @@ export function InventoryFormView({ type }) {
           return moveData;
         })
       };
+      
+      // Only include reference if it has a value (for updates)
+      if (formData.reference && formData.reference.trim() !== '') {
+        pickingData.reference = formData.reference;
+      }
+      
+      console.log('Saving picking data:', pickingData);
       
       if (isNew) {
         // Create new picking with nested write format

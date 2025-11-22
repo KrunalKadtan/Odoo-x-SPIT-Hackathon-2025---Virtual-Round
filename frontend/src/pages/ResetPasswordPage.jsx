@@ -86,12 +86,12 @@ export function ResetPasswordPage() {
         formData.newPassword
       );
       
-      // Store tokens and navigate to dashboard
+      // Store tokens and navigate to inventory dashboard
       tokenManager.setTokens(response.access_token, response.refresh_token);
       
       // Show success message and redirect
       alert('Password reset successful! Redirecting to dashboard...');
-      navigate('/dashboard');
+      navigate('/inventory/dashboard');
     } catch (err) {
       const errorData = err.response?.data;
       if (errorData?.details) {

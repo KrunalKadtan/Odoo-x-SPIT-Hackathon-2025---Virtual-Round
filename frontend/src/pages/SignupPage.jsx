@@ -82,8 +82,8 @@ export function SignupPage() {
       tokenManager.setTokens(response.access_token, response.refresh_token);
       localStorage.setItem('user', JSON.stringify(response.user));
       
-      // Navigate to dashboard
-      navigate('/dashboard');
+      // Navigate to inventory dashboard
+      navigate('/inventory/dashboard');
     } catch (err) {
       const errorData = err.response?.data;
       if (errorData?.details) {

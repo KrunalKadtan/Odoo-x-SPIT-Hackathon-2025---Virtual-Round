@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE_URL = 'http://localhost:8000/api/auth';
+const API_BASE_URL = 'http://localhost:8000/api';
 
 // Create axios instance
 const api = axios.create({
@@ -36,7 +36,7 @@ api.interceptors.response.use(
       try {
         const refreshToken = localStorage.getItem('refresh_token');
         if (refreshToken) {
-          const response = await axios.post(`${API_BASE_URL}/token/refresh/`, {
+          const response = await axios.post(`${API_BASE_URL}/auth/token/refresh/`, {
             refresh: refreshToken,
           });
 
@@ -64,7 +64,7 @@ api.interceptors.response.use(
 export const authAPI = {
   // Sign up
   signup: async (loginId, email, password) => {
-    const response = await api.post('/signup/', {
+    const response = await api.post('/auth/signup/', {
       login_id: loginId,
       email: email,
       password: password,
@@ -74,7 +74,7 @@ export const authAPI = {
 
   // Login
   login: async (loginId, password) => {
-    const response = await api.post('/login/', {
+    const response = await api.post('/auth/login/', {
       login_id: loginId,
       password: password,
     });
@@ -83,7 +83,7 @@ export const authAPI = {
 
   // Request password reset OTP
   requestPasswordReset: async (email) => {
-    const response = await api.post('/password-reset/request/', {
+    const response = await api.post('/auth/password-reset/request/', {
       email: email,
     });
     return response.data;
@@ -91,7 +91,7 @@ export const authAPI = {
 
   // Confirm password reset with OTP
   confirmPasswordReset: async (email, otpCode, newPassword) => {
-    const response = await api.post('/password-reset/confirm/', {
+    const response = await api.post('/auth/password-reset/confirm/', {
       email: email,
       otp_code: otpCode,
       new_password: newPassword,
@@ -101,7 +101,7 @@ export const authAPI = {
 
   // Refresh token
   refreshToken: async (refreshToken) => {
-    const response = await api.post('/token/refresh/', {
+    const response = await api.post('/auth/token/refresh/', {
       refresh: refreshToken,
     });
     return response.data;
@@ -131,6 +131,127 @@ export const tokenManager = {
 
   isAuthenticated: () => {
     return !!localStorage.getItem('access_token');
+  },
+};
+
+// Inventory API functions
+export const inventoryAPI = {
+  // Categories
+  getCategories: async () => {
+    const response = await api.get('/inventory/categories/');
+    return response.data;
+  },
+
+  // Products
+  getProducts: async (params = {}) => {
+    const response = await api.get('/inventory/products/', { params });
+    return response.data;
+  },
+
+  getProduct: async (id) => {
+    const response = await api.get(`/inventory/products/${id}/`);
+    return response.data;
+  },
+
+  createProduct: async (data) => {
+    const response = await api.post('/inventory/products/', data);
+    return response.data;
+  },
+
+  // Locations
+  getLocations: async (params = {}) => {
+    const response = await api.get('/inventory/locations/', { params });
+    return response.data;
+  },
+
+  // Operation Types
+  getOperationTypes: async () => {
+    const response = await api.get('/inventory/operation-types/');
+    return response.data;
+  },
+
+  // Pickings
+  getPickings: async (params = {}) => {
+    const response = await api.get('/inventory/pickings/', { params });
+    return response.data;
+  },
+
+  getPicking: async (id) => {
+    const response = await api.get(`/inventory/pickings/${id}/`);
+    return response.data;
+  },
+
+  createPicking: async (data) => {
+    const response = await api.post('/inventory/pickings/', data);
+    return response.data;
+  },
+
+  updatePicking: async (id, data) => {
+    const response = await api.put(`/inventory/pickings/${id}/`, data);
+    return response.data;
+  },
+
+  confirmPicking: async (id) => {
+    const response = await api.post(`/inventory/pickings/${id}/confirm/`);
+    return response.data;
+  },
+
+  validatePicking: async (id) => {
+    const response = await api.post(`/inventory/pickings/${id}/validate/`);
+    return response.data;
+  },
+
+  cancelPicking: async (id) => {
+    const response = await api.post(`/inventory/pickings/${id}/cancel/`);
+    return response.data;
+  },
+
+  // Stock Moves
+  createStockMove: async (data) => {
+    const response = await api.post('/inventory/stock-moves/', data);
+    return response.data;
+  },
+
+  updateStockMove: async (id, data) => {
+    const response = await api.put(`/inventory/stock-moves/${id}/`, data);
+    return response.data;
+  },
+
+  deleteStockMove: async (id) => {
+    const response = await api.delete(`/inventory/stock-moves/${id}/`);
+    return response.data;
+  },
+
+  // Stock Quantities
+  getStockQuants: async (params = {}) => {
+    const response = await api.get('/inventory/stock-quants/', { params });
+    return response.data;
+  },
+
+  getLowStock: async () => {
+    const response = await api.get('/inventory/stock-quants/low_stock/');
+    return response.data;
+  },
+
+  getOutOfStock: async () => {
+    const response = await api.get('/inventory/stock-quants/out_of_stock/');
+    return response.data;
+  },
+
+  // Tasks
+  getTasks: async (params = {}) => {
+    const response = await api.get('/inventory/tasks/', { params });
+    return response.data;
+  },
+
+  getMyTasks: async () => {
+    const response = await api.get('/inventory/tasks/my_tasks/');
+    return response.data;
+  },
+
+  completeTask: async (id) => {
+    const response = await api.post(`/inventory/tasks/${id}/complete/`);
+    return response.data;
   },
 };
 

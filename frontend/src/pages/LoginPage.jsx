@@ -36,8 +36,8 @@ export function LoginPage() {
       tokenManager.setTokens(response.access_token, response.refresh_token);
       localStorage.setItem('user', JSON.stringify(response.user));
       
-      // Navigate to dashboard
-      navigate('/dashboard');
+      // Navigate to inventory dashboard
+      navigate('/inventory/dashboard');
     } catch (err) {
       setError(err.response?.data?.error || 'Invalid credentials. Please try again.');
     } finally {

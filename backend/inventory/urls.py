@@ -1,0 +1,25 @@
+"""
+URL configuration for inventory API endpoints.
+"""
+
+from django.urls import path, include
+from rest_framework.routers import DefaultRouter
+from .views import (
+    CategoryViewSet, ProductViewSet, LocationViewSet,
+    OperationTypeViewSet, PickingViewSet, StockMoveViewSet,
+    TaskViewSet, StockQuantViewSet
+)
+
+router = DefaultRouter()
+router.register(r'categories', CategoryViewSet, basename='category')
+router.register(r'products', ProductViewSet, basename='product')
+router.register(r'locations', LocationViewSet, basename='location')
+router.register(r'operation-types', OperationTypeViewSet, basename='operationtype')
+router.register(r'pickings', PickingViewSet, basename='picking')
+router.register(r'stock-moves', StockMoveViewSet, basename='stockmove')
+router.register(r'tasks', TaskViewSet, basename='task')
+router.register(r'stock-quants', StockQuantViewSet, basename='stockquant')
+
+urlpatterns = [
+    path('', include(router.urls)),
+]

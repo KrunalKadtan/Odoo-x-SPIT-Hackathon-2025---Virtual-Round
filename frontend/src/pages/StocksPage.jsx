@@ -4,6 +4,8 @@ import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '../components/ui/Table';
 import { Badge } from '../components/ui/Badge';
+import { AddProductModal } from '../components/AddProductModal';
+import { AddLocationModal } from '../components/AddLocationModal';
 import { inventoryAPI } from '../services/api';
 import './StocksPage.css';
 
@@ -11,9 +13,12 @@ export function StocksPage() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('products');
   const [products, setProducts] = useState([]);
+  const [locations, setLocations] = useState([]);
   const [stockQuants, setStockQuants] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
+  const [isProductModalOpen, setIsProductModalOpen] = useState(false);
+  const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
 
   useEffect(() => {
     fetchData();
@@ -28,12 +33,23 @@ export function StocksPage() {
       } else if (activeTab === 'levels') {
         const data = await inventoryAPI.getStockQuants();
         setStockQuants(data);
+      } else if (activeTab === 'locations') {
+        const data = await inventoryAPI.getLocations();
+        setLocations(data);
       }
     } catch (error) {
       console.error('Error fetching data:', error);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleProductSuccess = () => {
+    fetchData();
+  };
+
+  const handleLocationSuccess = () => {
+    fetchData();
   };
 
   const filteredProducts = products.filter(p =>
@@ -45,6 +61,12 @@ export function StocksPage() {
     sq.product_sku?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     sq.product_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     sq.location_name?.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const filteredLocations = locations.filter(loc =>
+    loc.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    loc.full_path?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    loc.barcode?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const tabs = [
@@ -93,7 +115,7 @@ export function StocksPage() {
                   onChange={(e) => setSearchTerm(e.target.value)}
                 />
               </div>
-              <Button disabled>
+              <Button onClick={() => setIsProductModalOpen(true)}>
                 <svg className="button-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                 </svg>
@@ -198,27 +220,79 @@ export function StocksPage() {
         {activeTab === 'locations' && (
           <div className="tab-content">
             <div className="content-header">
-              <h2 className="content-title">Warehouse Locations</h2>
-              <Button disabled>
+              <div className="search-wrapper">
+                <svg className="search-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                <Input
+                  placeholder="Search locations by name or barcode..."
+                  className="search-input"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+              </div>
+              <Button onClick={() => setIsLocationModalOpen(true)}>
                 <svg className="button-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                 </svg>
                 New Location
               </Button>
             </div>
-            <p className="content-description">
-              Manage warehouse locations, zones, and storage areas.
-            </p>
-            <div className="placeholder-box">
-              <svg className="placeholder-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
-              <p className="placeholder-text">Locations management feature coming soon...</p>
-            </div>
+
+            {loading ? (
+              <div className="loading-state">Loading locations...</div>
+            ) : filteredLocations.length === 0 ? (
+              <div className="empty-state">No locations found</div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow className="header-row">
+                    <TableHead>Name</TableHead>
+                    <TableHead>Full Path</TableHead>
+                    <TableHead>Usage Type</TableHead>
+                    <TableHead>Barcode</TableHead>
+                    <TableHead>Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredLocations.map((location) => (
+                    <TableRow key={location.id} className="data-row">
+                      <TableCell className="name-cell">{location.name}</TableCell>
+                      <TableCell>{location.full_path || location.name}</TableCell>
+                      <TableCell>
+                        <Badge className="badge-info">
+                          {location.usage_type_display || location.usage_type}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>{location.barcode || '-'}</TableCell>
+                      <TableCell>
+                        {location.is_active ? (
+                          <Badge className="badge-ready">Active</Badge>
+                        ) : (
+                          <Badge className="badge-draft">Inactive</Badge>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
           </div>
         )}
       </div>
+
+      {/* Modals */}
+      <AddProductModal
+        isOpen={isProductModalOpen}
+        onClose={() => setIsProductModalOpen(false)}
+        onSuccess={handleProductSuccess}
+      />
+
+      <AddLocationModal
+        isOpen={isLocationModalOpen}
+        onClose={() => setIsLocationModalOpen(false)}
+        onSuccess={handleLocationSuccess}
+      />
     </div>
   );
 }

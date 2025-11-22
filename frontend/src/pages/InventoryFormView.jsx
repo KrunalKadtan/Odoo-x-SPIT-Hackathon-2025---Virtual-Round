@@ -133,6 +133,19 @@ export function InventoryFormView({ type }) {
     try {
       setSaving(true);
       
+      // Validate that we have at least one stock move
+      if (stockMoves.length === 0) {
+        alert('Please add at least one product line before saving.');
+        return;
+      }
+
+      // Validate that all stock moves have required fields
+      const invalidMoves = stockMoves.filter(m => !m.product || !m.quantity || m.quantity <= 0);
+      if (invalidMoves.length > 0) {
+        alert('Please ensure all product lines have a product selected and a valid quantity.');
+        return;
+      }
+      
       if (isNew) {
         // Create new picking
         const pickingData = {
@@ -155,6 +168,7 @@ export function InventoryFormView({ type }) {
           }
         }
         
+        alert('Picking created successfully!');
         navigate(`/inventory/${type}/${newPicking.id}`);
       } else {
         // Update existing picking
@@ -179,11 +193,22 @@ export function InventoryFormView({ type }) {
           }
         }
         
+        alert('Picking updated successfully!');
         await fetchPicking();
       }
     } catch (error) {
       console.error('Error saving:', error);
-      alert('Error saving picking');
+      const errorData = error.response?.data;
+      
+      if (errorData?.details) {
+        // Handle validation errors
+        const errorMessages = Object.entries(errorData.details)
+          .map(([field, messages]) => `${field}: ${Array.isArray(messages) ? messages.join(', ') : messages}`)
+          .join('\n');
+        alert(`Validation Error:\n\n${errorMessages}`);
+      } else {
+        alert(errorData?.error || 'Error saving picking. Please try again.');
+      }
     } finally {
       setSaving(false);
     }
@@ -192,11 +217,25 @@ export function InventoryFormView({ type }) {
   const handleValidate = async () => {
     try {
       await inventoryAPI.validatePicking(id);
-      alert('Picking validated successfully!');
+      alert('Picking validated successfully! Stock has been updated.');
       await fetchPicking();
     } catch (error) {
       console.error('Error validating:', error);
-      alert('Error validating picking');
+      const errorData = error.response?.data;
+      
+      // Check for insufficient stock error
+      if (errorData?.error && errorData?.product) {
+        alert(
+          `❌ Insufficient Stock\n\n` +
+          `Product: ${errorData.product}\n` +
+          `Required: ${errorData.required}\n` +
+          `Available: ${errorData.available}\n` +
+          `Location: ${errorData.location}\n\n` +
+          `Please adjust the quantity or check stock levels.`
+        );
+      } else {
+        alert(errorData?.error || 'Error validating picking. Please try again.');
+      }
     }
   };
 
@@ -414,11 +453,16 @@ export function InventoryFormView({ type }) {
                               <SelectContent>
                                 {products.map(prod => (
                                   <SelectItem key={prod.id} value={prod.id}>
-                                    {prod.sku} - {prod.name}
+                                    {prod.sku} - {prod.name} ({prod.uom || 'Units'})
                                   </SelectItem>
                                 ))}
                               </SelectContent>
-                              {products.find(p => p.id === value)?.name || 'Select product'}
+                              {(() => {
+                                const selectedProduct = products.find(p => p.id === value);
+                                return selectedProduct 
+                                  ? `${selectedProduct.sku} - ${selectedProduct.name} (${selectedProduct.uom || 'Units'})`
+                                  : 'Select product';
+                              })()}
                             </SelectValue>
                           </SelectTrigger>
                         )}

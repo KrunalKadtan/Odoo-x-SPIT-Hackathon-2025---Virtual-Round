@@ -253,6 +253,12 @@ export const inventoryAPI = {
     const response = await api.post(`/inventory/tasks/${id}/complete/`);
     return response.data;
   },
+
+  // Dashboard Statistics
+  getDashboardStats: async () => {
+    const response = await api.get('/inventory/dashboard-stats/');
+    return response.data;
+  },
 };
 
 export default api;

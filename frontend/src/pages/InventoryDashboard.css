@@ -21,12 +21,18 @@
 .dashboard-grid {
   display: grid;
   gap: 1.5rem;
-  max-width: 64rem;
+  max-width: 80rem;
 }
 
 @media (min-width: 768px) {
   .dashboard-grid {
     grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 1024px) {
+  .dashboard-grid {
+    grid-template-columns: repeat(4, 1fr);
   }
 }
 
@@ -76,6 +82,22 @@
 
 .icon-wrapper.blue .icon {
   color: #2563eb;
+}
+
+.icon-wrapper.amber {
+  background-color: #fef3c7;
+}
+
+.icon-wrapper.amber .icon {
+  color: #d97706;
+}
+
+.icon-wrapper.purple {
+  background-color: #ede9fe;
+}
+
+.icon-wrapper.purple .icon {
+  color: #7c3aed;
 }
 
 .card-label {
@@ -129,6 +151,18 @@
 
 .indicator-dot.gray {
   background-color: #94a3b8;
+}
+
+.indicator-dot.blue {
+  background-color: #3b82f6;
+}
+
+.indicator-dot.purple {
+  background-color: #8b5cf6;
+}
+
+.indicator-dot.green {
+  background-color: #10b981;
 }
 
 .indicator-text {

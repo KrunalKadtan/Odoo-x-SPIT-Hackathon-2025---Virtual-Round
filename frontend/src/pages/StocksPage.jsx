@@ -112,6 +112,7 @@ export function StocksPage() {
                     <TableHead>SKU</TableHead>
                     <TableHead>Name</TableHead>
                     <TableHead>Category</TableHead>
+                    <TableHead>UOM</TableHead>
                     <TableHead>Cost</TableHead>
                     <TableHead>Price</TableHead>
                     <TableHead>Status</TableHead>
@@ -123,6 +124,7 @@ export function StocksPage() {
                       <TableCell className="sku-cell">{product.sku}</TableCell>
                       <TableCell>{product.name}</TableCell>
                       <TableCell>{product.category_name || '-'}</TableCell>
+                      <TableCell className="uom-cell">{product.uom || 'Units'}</TableCell>
                       <TableCell>${parseFloat(product.cost).toFixed(2)}</TableCell>
                       <TableCell>${parseFloat(product.price).toFixed(2)}</TableCell>
                       <TableCell>

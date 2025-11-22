@@ -104,6 +104,11 @@
   color: #059669;
 }
 
+.uom-cell {
+  color: #64748b;
+  font-size: 0.875rem;
+}
+
 .loading-state,
 .empty-state {
   padding: 3rem;

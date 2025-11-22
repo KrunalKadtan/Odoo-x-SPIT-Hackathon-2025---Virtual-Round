@@ -31,7 +31,7 @@ class ProductSerializer(serializers.ModelSerializer):
         model = Product
         fields = [
             'id', 'sku', 'name', 'description', 'category', 'category_name',
-            'cost', 'price', 'barcode', 'is_active', 'created_at', 'updated_at'
+            'cost', 'price', 'barcode', 'uom', 'is_active', 'created_at', 'updated_at'
         ]
         read_only_fields = ['created_at', 'updated_at']
 
@@ -84,6 +84,9 @@ class StockMoveSerializer(serializers.ModelSerializer):
             'status', 'status_display', 'notes', 'created_at', 'updated_at'
         ]
         read_only_fields = ['created_at', 'updated_at']
+        extra_kwargs = {
+            'picking': {'required': False}
+        }
 
 
 class PickingSerializer(serializers.ModelSerializer):
@@ -92,7 +95,7 @@ class PickingSerializer(serializers.ModelSerializer):
     source_location_name = serializers.CharField(source='source_location.name', read_only=True)
     destination_location_name = serializers.CharField(source='destination_location.name', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
-    stock_moves = StockMoveSerializer(many=True, read_only=True)
+    stock_moves = StockMoveSerializer(many=True)
     stock_moves_count = serializers.SerializerMethodField()
     
     class Meta:
@@ -109,6 +112,92 @@ class PickingSerializer(serializers.ModelSerializer):
     
     def get_stock_moves_count(self, obj):
         return obj.stock_moves.count()
+    
+    def validate(self, data):
+        """Validate nested stock_moves data."""
+        stock_moves_data = data.get('stock_moves', [])
+        
+        # Validate that stock_moves list is not empty
+        if not stock_moves_data:
+            raise serializers.ValidationError({
+                'stock_moves': 'At least one stock move is required.'
+            })
+        
+        # Validate each stock move has required fields
+        for idx, move_data in enumerate(stock_moves_data):
+            required_fields = ['product', 'quantity', 'source_location', 'destination_location']
+            missing_fields = [field for field in required_fields if field not in move_data]
+            
+            if missing_fields:
+                raise serializers.ValidationError({
+                    'stock_moves': {
+                        idx: {field: 'This field is required.' for field in missing_fields}
+                    }
+                })
+        
+        return data
+    
+    def create(self, validated_data):
+        """Create picking with nested stock moves in a transaction."""
+        from django.db import transaction
+        
+        # Extract stock_moves from validated_data
+        stock_moves_data = validated_data.pop('stock_moves', [])
+        
+        # Create picking and stock moves in a transaction
+        with transaction.atomic():
+            # Create the parent Picking first
+            picking = Picking.objects.create(**validated_data)
+            
+            # Create each StockMove linked to the parent Picking
+            for move_data in stock_moves_data:
+                StockMove.objects.create(picking=picking, **move_data)
+        
+        return picking
+    
+    def update(self, instance, validated_data):
+        """Update picking and handle nested stock moves modifications."""
+        from django.db import transaction
+        
+        # Extract stock_moves from validated_data
+        stock_moves_data = validated_data.pop('stock_moves', None)
+        
+        with transaction.atomic():
+            # Update picking fields
+            for attr, value in validated_data.items():
+                setattr(instance, attr, value)
+            instance.save()
+            
+            # Handle stock moves if provided
+            if stock_moves_data is not None:
+                # Get existing move IDs from the data
+                existing_move_ids = []
+                
+                for move_data in stock_moves_data:
+                    move_id = move_data.get('id')
+                    
+                    if move_id:
+                        # Update existing move
+                        try:
+                            move = StockMove.objects.get(id=move_id, picking=instance)
+                            for attr, value in move_data.items():
+                                if attr != 'id':
+                                    setattr(move, attr, value)
+                            move.save()
+                            existing_move_ids.append(move_id)
+                        except StockMove.DoesNotExist:
+                            raise serializers.ValidationError({
+                                'stock_moves': f'Stock move with id {move_id} does not exist for this picking.'
+                            })
+                    else:
+                        # Create new move
+                        new_move = StockMove.objects.create(picking=instance, **move_data)
+                        existing_move_ids.append(new_move.id)
+                
+                # Remove moves that are not in the updated list
+                instance.stock_moves.exclude(id__in=existing_move_ids).delete()
+        
+        return instance
 
 
 class TaskSerializer(serializers.ModelSerializer):

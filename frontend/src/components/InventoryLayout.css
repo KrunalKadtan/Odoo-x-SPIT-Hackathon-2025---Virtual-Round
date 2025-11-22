@@ -1,0 +1,10 @@
+.inventory-layout {
+  min-height: 100vh;
+  background-color: #f8fafc;
+  display: flex;
+  flex-direction: column;
+}
+
+.inventory-main {
+  flex: 1;
+}
